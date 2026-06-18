@@ -13,8 +13,10 @@ export default function Home() {
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [apiProvider, setApiProvider] = useState<'google' | 'openrouter'>('google');
-    const [apiKey, setApiKey] = useState('');
-    const [model, setModel] = useState('gemini-3.5-flash');
+    const [googleApiKey, setGoogleApiKey] = useState('');
+    const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+    const [googleModel, setGoogleModel] = useState('gemini-3.5-flash');
+    const [openRouterModel, setOpenRouterModel] = useState('anthropic/claude-3-haiku');
     const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
     const [logs, setLogs] = useState<{ id: number; message: string; type: 'info' | 'success' | 'error' }[]>([]);
@@ -23,25 +25,20 @@ export default function Home() {
     useEffect(() => {
         const timer = setTimeout(() => {
             const savedProvider = localStorage.getItem('API_PROVIDER') as 'google' | 'openrouter';
-            const savedKey = localStorage.getItem('API_KEY');
-            const savedModel = localStorage.getItem('API_MODEL');
+            const savedGoogleKey = localStorage.getItem('GOOGLE_API_KEY') || localStorage.getItem('GEMINI_API_KEY') || localStorage.getItem('API_KEY') || '';
+            const savedOpenRouterKey = localStorage.getItem('OPENROUTER_API_KEY') || '';
+            const savedGoogleModel = localStorage.getItem('GOOGLE_MODEL') || localStorage.getItem('GEMINI_MODEL') || localStorage.getItem('API_MODEL') || 'gemini-3.5-flash';
+            const savedOpenRouterModel = localStorage.getItem('OPENROUTER_MODEL') || 'anthropic/claude-3-haiku';
             const savedTheme = localStorage.getItem('THEME') as 'light' | 'dark';
             const savedLogs = localStorage.getItem('CHAT_LOGS');
             const savedPdfUrl = localStorage.getItem('CHAT_PDF_URL');
             const savedInput = localStorage.getItem('CHAT_INPUT');
 
             if (savedProvider) setApiProvider(savedProvider);
-            if (savedKey) setApiKey(savedKey);
-            // Fallback for previous keys
-            if (!savedKey) {
-                const oldGeminiKey = localStorage.getItem('GEMINI_API_KEY');
-                if (oldGeminiKey) setApiKey(oldGeminiKey);
-            }
-            if (savedModel) setModel(savedModel);
-            if (!savedModel) {
-                 const oldGeminiModel = localStorage.getItem('GEMINI_MODEL');
-                 if (oldGeminiModel) setModel(oldGeminiModel);
-            }
+            setGoogleApiKey(savedGoogleKey);
+            setOpenRouterApiKey(savedOpenRouterKey);
+            setGoogleModel(savedGoogleModel);
+            setOpenRouterModel(savedOpenRouterModel);
 
             if (savedTheme) {
                 setTheme(savedTheme);
@@ -74,11 +71,10 @@ export default function Home() {
 
     const saveSettings = () => {
         localStorage.setItem('API_PROVIDER', apiProvider);
-        localStorage.setItem('API_KEY', apiKey);
-        localStorage.setItem('API_MODEL', model);
-        // keep old keys synced just in case
-        localStorage.setItem('GEMINI_API_KEY', apiKey);
-        localStorage.setItem('GEMINI_MODEL', model);
+        localStorage.setItem('GOOGLE_API_KEY', googleApiKey);
+        localStorage.setItem('OPENROUTER_API_KEY', openRouterApiKey);
+        localStorage.setItem('GOOGLE_MODEL', googleModel);
+        localStorage.setItem('OPENROUTER_MODEL', openRouterModel);
         setIsSettingsOpen(false);
     };
 
@@ -98,7 +94,11 @@ export default function Home() {
 
     useEffect(() => {
         if (pdfUrl) {
-            localStorage.setItem('CHAT_PDF_URL', pdfUrl);
+            try {
+                localStorage.setItem('CHAT_PDF_URL', pdfUrl);
+            } catch (e) {
+                console.warn('PDF exceeds localStorage quota.', e);
+            }
         } else {
             localStorage.removeItem('CHAT_PDF_URL');
         }
@@ -159,7 +159,10 @@ export default function Home() {
 
         chunks = chunks.filter(c => c.length > 0);
 
-        if (!apiKey || apiKey.trim() === '') {
+        const currentApiKey = apiProvider === 'google' ? googleApiKey : openRouterApiKey;
+        const currentModel = apiProvider === 'google' ? googleModel : openRouterModel;
+
+        if (!currentApiKey || currentApiKey.trim() === '') {
             setLogs([{ id: Date.now(), message: "API Key is missing. Please configure it in Settings first.", type: 'error' }]);
             setIsSettingsOpen(true);
             return;
@@ -183,7 +186,7 @@ export default function Home() {
                 const res = await fetch('/api/generate-chunk', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: chunks[i], apiKey, model, apiProvider })
+                    body: JSON.stringify({ text: chunks[i], apiKey: currentApiKey, model: currentModel, apiProvider })
                 });
 
                 if (!res.ok) {
@@ -222,16 +225,20 @@ export default function Home() {
             }
 
             const blob = await pdfRes.blob();
-            const url = window.URL.createObjectURL(blob);
-            setPdfUrl(url);
-            
-            setProgress(100);
-            setLogs(prev => [...prev, { id: Date.now() + Math.random(), message: `PDF is Ready! Displaying preview...`, type: 'success' }]);
-            
-            setTimeout(() => {
-                setActiveTab('preview');
-                setIsLoading(false);
-            }, 1000);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64data = reader.result as string;
+                setPdfUrl(base64data);
+                
+                setProgress(100);
+                setLogs(prev => [...prev, { id: Date.now() + Math.random(), message: `PDF is Ready! Displaying preview...`, type: 'success' }]);
+                
+                setTimeout(() => {
+                    setActiveTab('preview');
+                    setIsLoading(false);
+                }, 1000);
+            };
+            reader.readAsDataURL(blob);
 
         } catch (error: any) {
             setLogs(prev => [...prev, { id: Date.now() + Math.random(), message: `Error: ${error.message}`, type: 'error' }]);
@@ -531,8 +538,8 @@ export default function Home() {
                                 </label>
                                 <input 
                                     type="password" 
-                                    value={apiKey}
-                                    onChange={(e) => setApiKey(e.target.value)}
+                                    value={apiProvider === 'google' ? googleApiKey : openRouterApiKey}
+                                    onChange={(e) => apiProvider === 'google' ? setGoogleApiKey(e.target.value) : setOpenRouterApiKey(e.target.value)}
                                     placeholder={apiProvider === 'google' ? 'AIzaSy...' : 'sk-or-v1-...'}
                                     className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                 />
@@ -543,8 +550,8 @@ export default function Home() {
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Model Selection</label>
                                 {apiProvider === 'google' ? (
                                     <select 
-                                        value={model}
-                                        onChange={(e) => setModel(e.target.value)}
+                                        value={googleModel}
+                                        onChange={(e) => setGoogleModel(e.target.value)}
                                         className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50 dark:bg-gray-800"
                                     >
                                         <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fastest)</option>
@@ -559,8 +566,8 @@ export default function Home() {
                                 ) : (
                                     <input 
                                         type="text" 
-                                        value={model}
-                                        onChange={(e) => setModel(e.target.value)}
+                                        value={openRouterModel}
+                                        onChange={(e) => setOpenRouterModel(e.target.value)}
                                         placeholder="e.g. anthropic/claude-3-haiku"
                                         className="w-full px-3 py-2 border dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50 dark:bg-gray-800"
                                     />
