@@ -2,6 +2,7 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+// serverExternalPackages: ['puppeteer-core', '@sparticuz/chromium', 'puppeteer'],
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -19,7 +20,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  output: 'standalone',
+// output: 'standalone',
   transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.

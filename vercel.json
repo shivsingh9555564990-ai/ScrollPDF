@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "functions": {
+    "app/api/generate-pdf/route.ts": {
+      "memory": 3008,
+      "maxDuration": 60
+    }
+  }
+}

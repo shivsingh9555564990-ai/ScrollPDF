@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,11 +31,25 @@ export async function POST(req: NextRequest) {
       </html>
     `;
 
-    // Launch puppeteer
-    const browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      headless: true
-    });
+    // Launch puppeteer based on environment
+    let browser;
+    if (process.env.VERCEL === '1') {
+      const chromium = await import('@sparticuz/chromium');
+      const puppeteerCore = await import('puppeteer-core');
+      
+      browser = await puppeteerCore.launch({
+        args: chromium.default.args,
+        defaultViewport: { width: 414, height: 896 },
+        executablePath: await chromium.default.executablePath(),
+        headless: true,
+      });
+    } else {
+      const puppeteer = await import('puppeteer');
+      browser = await puppeteer.default.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        headless: true
+      });
+    }
     
     const page = await browser.newPage();
     await page.setContent(fullHtml, { waitUntil: 'load' });
